@@ -1,0 +1,12 @@
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.2",
+  "base_commit_sha": "34b128e0962c3bcb7178fe5b0b605b9ee1544260",
+  "prompts": {},
+  "humans": {
+    "h_cae5f48391e66f": {
+      "author": "cairongquan"
+    }
+  }
+}

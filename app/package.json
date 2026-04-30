@@ -1,0 +1,27 @@
+{
+  "name": "vue3-ts-app",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "dev": "vite",
+    "build": "vue-tsc && vite build",
+    "preview": "vite preview"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "axios": "^1.15.2",
+    "pinia": "^3.0.4",
+    "quill": "^2.0.3",
+    "vue": "^3.5.33",
+    "vue-router": "^4.6.4"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-vue": "^5.2.4",
+    "typescript": "^6.0.3",
+    "vite": "^5.4.21",
+    "vue-tsc": "^3.2.7"
+  }
+}

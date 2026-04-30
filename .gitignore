@@ -1,0 +1,36 @@
+# OS / Editor
+.DS_Store
+.idea/
+.vscode/
+*.swp
+
+# Logs
+*.log
+logs/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# Node / Frontend
+app/node_modules/
+app/dist/
+app/.vite/
+
+# Python / Backend
+service/venv/
+service/__pycache__/
+service/**/*.pyc
+service/.pytest_cache/
+
+# Runtime / Data
+service/social_algorithm.db
+service/uploads/
+
+# Temp
+tmp/
+*.tmp

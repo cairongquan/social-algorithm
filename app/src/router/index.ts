@@ -53,6 +53,12 @@ const routes: RouteRecordRaw[] = [
     name: 'Topology',
     component: () => import('@/views/TopologyView.vue'),
     meta: { requiresAuth: true }
+  },
+  {
+    path: '/admin/algorithm',
+    name: 'AdminAlgorithm',
+    component: () => import('@/views/AdminAlgorithmView.vue'),
+    meta: { requiresAuth: true }
   }
 ]
 
@@ -65,6 +71,8 @@ router.beforeEach((to, from, next) => {
   const authStore = useAuthStore()
   if (to.meta.requiresAuth && !authStore.isAuthenticated) {
     next('/login')
+  } else if ((to.name === 'Topology' || to.name === 'AdminAlgorithm') && !authStore.isAdmin) {
+    next('/')
   } else {
     next()
   }

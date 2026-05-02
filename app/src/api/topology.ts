@@ -18,8 +18,15 @@ export type TopologyOverview = {
 }
 
 export type TopologyGraph = {
-  nodes: Array<{ id: string; username: string; avatar_url?: string | null }>
-  edges: Array<{ follower_id: string; followee_id: string }>
+  nodes: Array<{ id: string; name: string; node_type: 'user' | 'tag'; avatar_url?: string | null }>
+  edges: Array<{
+    source: string
+    target: string
+    relation: 'behavior' | 'author' | 'behavior+author'
+    weight: number
+    count: number
+    tag_name: string
+  }>
 }
 
 export const topologyApi = {

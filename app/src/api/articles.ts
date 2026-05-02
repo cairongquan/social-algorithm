@@ -56,6 +56,12 @@ export const articlesApi = {
     return response.data
   },
 
+  async deleteComment(articleId: string, commentId: string): Promise<void> {
+    await axios.delete(`${API_BASE}/articles/${articleId}/comments/${commentId}`, {
+      headers: getHeaders()
+    })
+  },
+
   async markView(id: string): Promise<void> {
     await axios.post(`${API_BASE}/articles/${id}/view`, {}, { headers: getHeaders() })
   }

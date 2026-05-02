@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { articlesApi } from '@/api/articles'
+import { adminApi, type AlgorithmCurrent } from '@/api/admin'
 import type { SquareArticle, ArticleComment } from '@/types/article'
 import AppInput from '@/components/AppInput.vue'
 import AppDialog from '@/components/AppDialog.vue'
@@ -9,25 +10,21 @@ import EmptyWiltedFlower from '@/components/EmptyWiltedFlower.vue'
 const loading = ref(false)
 const error = ref('')
 const articles = ref<SquareArticle[]>([])
-const currentIndex = ref(0)
 const commentsMap = ref<Record<string, ArticleComment[]>>({})
 const commentInput = ref<Record<string, string>>({})
-const swiping = ref(false)
 const showDialog = ref(false)
 const dialogMessage = ref('')
-const showSwipeOverlay = ref(false)
+const sortBy = ref<'recommend' | 'latest'>('recommend')
+const algorithmCurrent = ref<AlgorithmCurrent | null>(null)
 
-const currentArticle = computed(() => articles.value[currentIndex.value] || null)
-
-let previousBodyOverflow = ''
-
-watch(showSwipeOverlay, (visible) => {
-  if (visible) {
-    previousBodyOverflow = document.body.style.overflow
-    document.body.style.overflow = 'hidden'
-  } else {
-    document.body.style.overflow = previousBodyOverflow
+const sortedArticles = computed(() => {
+  const list = [...articles.value]
+  if (sortBy.value === 'recommend') {
+    return list.sort((a, b) => (b.recommend_score || 0) - (a.recommend_score || 0))
   }
+  return list.sort(
+    (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+  )
 })
 
 async function loadSquare() {
@@ -35,6 +32,8 @@ async function loadSquare() {
   error.value = ''
   try {
     articles.value = await articlesApi.square()
+    await Promise.all(articles.value.map((item) => loadComments(item.id)))
+    algorithmCurrent.value = await adminApi.getAlgorithmCurrent()
   } catch (e) {
     error.value = '加载广场失败'
   } finally {
@@ -69,50 +68,8 @@ async function submitComment(articleId: string) {
   if (hit) hit.comments_count += 1
 }
 
-async function openSwipeOverlay(startId: string) {
-  const index = articles.value.findIndex(item => item.id === startId)
-  currentIndex.value = index >= 0 ? index : 0
-  showSwipeOverlay.value = true
-  try {
-    await articlesApi.markView(startId)
-  } catch (error) {
-    // ignore behavior logging failure
-  }
-}
-
-function closeSwipeOverlay() {
-  showSwipeOverlay.value = false
-  swiping.value = false
-}
-
-function prevSwipe() {
-  if (currentIndex.value <= 0) return
-  swiping.value = true
-  window.setTimeout(() => {
-    currentIndex.value -= 1
-    swiping.value = false
-  }, 220)
-}
-
-function nextSwipe() {
-  if (currentIndex.value >= articles.value.length - 1) return
-  swiping.value = true
-  window.setTimeout(() => {
-    currentIndex.value += 1
-    swiping.value = false
-    const next = currentArticle.value
-    if (next) {
-      articlesApi.markView(next.id).catch(() => {})
-    }
-  }, 220)
-}
-
 onMounted(() => {
   loadSquare()
-})
-
-onBeforeUnmount(() => {
-  document.body.style.overflow = previousBodyOverflow
 })
 </script>
 
@@ -120,7 +77,43 @@ onBeforeUnmount(() => {
   <div class="square-view">
     <div class="header">
       <h1>广场</h1>
-      <p class="header-hint">点击卡片进入左滑模式</p>
+      <p class="header-hint">个性化推荐信息流</p>
+    </div>
+
+    <div class="sort-bar">
+      <span class="sort-label">排序：</span>
+      <button
+        class="action-btn"
+        :class="{ active: sortBy === 'recommend' }"
+        @click="sortBy = 'recommend'"
+      >
+        推荐分
+      </button>
+      <button
+        class="action-btn"
+        :class="{ active: sortBy === 'latest' }"
+        @click="sortBy = 'latest'"
+      >
+        最新发布时间
+      </button>
+    </div>
+
+    <div v-if="algorithmCurrent" class="algo-panel">
+      <p><strong>当前模型：</strong>{{ algorithmCurrent.mode_name }} (mode {{ algorithmCurrent.algo_mode }})</p>
+      <p>
+        <strong>当前权重：</strong>
+        similarity={{ algorithmCurrent.similarity_weight }}，
+        hot={{ algorithmCurrent.hot_weight }}，
+        follow={{ algorithmCurrent.follow_weight }}，
+        liked={{ algorithmCurrent.liked_weight }}，
+        diversity_penalty={{ algorithmCurrent.diversity_penalty }}
+      </p>
+      <p>
+        <strong>热度系数：</strong>
+        like_factor={{ algorithmCurrent.hot_like_factor }}，
+        comment_factor={{ algorithmCurrent.hot_comment_factor }}，
+        decay={{ algorithmCurrent.decay_factor }}
+      </p>
     </div>
 
     <div v-if="loading">加载中...</div>
@@ -128,7 +121,7 @@ onBeforeUnmount(() => {
     <EmptyWiltedFlower v-else-if="articles.length === 0" text="广场暂无内容" />
 
     <div v-else class="feed-list">
-      <article v-for="item in articles" :key="item.id" class="square-card">
+      <article v-for="item in sortedArticles" :key="item.id" class="square-card">
         <h3>{{ item.title }}</h3>
         <p class="meta">{{ item.author }} · {{ item.created_at }}</p>
         <div class="content" v-html="item.content"></div>
@@ -137,53 +130,26 @@ onBeforeUnmount(() => {
         </div>
         <div class="actions">
           <button class="action-btn" @click.stop="toggleLike(item)">{{ item.liked_by_me ? '取消赞' : '点赞' }} {{ item.likes_count }}</button>
-          <button class="action-btn" @click.stop="loadComments(item.id)">评论 {{ item.comments_count }}</button>
-          <button class="action-btn" @click.stop="openSwipeOverlay(item.id)">卡片浏览</button>
+          <span class="comment-count">评论 {{ item.comments_count }}</span>
+        </div>
+        <div class="recommend-tip" v-if="item.recommend_reason">
+          <p class="tip-title">{{ item.recommend_reason.tip }}：</p>
+          <p class="tip-line">推荐分：{{ item.recommend_score.toFixed(4) }}</p>
+          <p class="tip-line">命中标签：{{ item.recommend_reason.matched_tags.join('、') }}</p>
+          <p class="tip-line">算法结果：0.6×相似度({{ item.recommend_reason.similarity_score.toFixed(3) }}) + 0.2×热度({{ item.recommend_reason.hot_score.toFixed(3) }}) + 0.15×关注加成({{ item.recommend_reason.follow_bonus.toFixed(1) }}) + 0.05×点赞偏好({{ item.recommend_reason.liked_bonus.toFixed(1) }}) - 多样性惩罚({{ item.recommend_reason.diversity_penalty.toFixed(1) }})</p>
         </div>
         <div class="comment-box" @click.stop>
           <AppInput v-model="commentInput[item.id]" placeholder="写下你的留言/评论" />
           <button class="action-btn" @click.stop="submitComment(item.id)">发布</button>
         </div>
-        <div class="comments" v-if="commentsMap[item.id]?.length" @click.stop>
+        <div class="comments" @click.stop>
+          <p v-if="!commentsMap[item.id] || commentsMap[item.id].length === 0" class="comment-line">暂无评论</p>
           <p v-for="comment in commentsMap[item.id]" :key="comment.id" class="comment-line">
             <strong>{{ comment.username }}：</strong>{{ comment.content }}
           </p>
         </div>
       </article>
     </div>
-
-    <Teleport to="body">
-      <div v-if="showSwipeOverlay" class="swipe-overlay" @click.self="closeSwipeOverlay">
-        <div class="overlay-header">
-          <span class="index-text">{{ currentIndex + 1 }} / {{ articles.length }}</span>
-          <button class="close-btn" @click="closeSwipeOverlay">×</button>
-        </div>
-        <div class="stack-wrap">
-          <button class="nav-arrow nav-left" @click="prevSwipe" :disabled="currentIndex <= 0">‹</button>
-          <button class="nav-arrow nav-right" @click="nextSwipe" :disabled="currentIndex >= articles.length - 1">›</button>
-          <div v-for="(item, index) in articles.slice(currentIndex, currentIndex + 3)" :key="item.id" :class="['stack-card', `layer-${index}`, { swiping: index === 0 && swiping }]">
-            <template v-if="index === 0">
-              <h3>{{ item.title }}</h3>
-              <p class="meta">{{ item.author }} · {{ item.created_at }}</p>
-              <div class="content" v-html="item.content"></div>
-              <div class="actions">
-                <button class="action-btn" @click.stop="toggleLike(item)">{{ item.liked_by_me ? '取消赞' : '点赞' }} {{ item.likes_count }}</button>
-                <button class="action-btn" @click.stop="loadComments(item.id)">评论 {{ item.comments_count }}</button>
-              </div>
-              <div class="comment-box">
-                <AppInput v-model="commentInput[item.id]" placeholder="写下你的留言/评论" />
-                <button class="action-btn" @click.stop="submitComment(item.id)">发布</button>
-              </div>
-              <div class="comments" v-if="commentsMap[item.id]?.length">
-                <p v-for="comment in commentsMap[item.id]" :key="comment.id" class="comment-line">
-                  <strong>{{ comment.username }}：</strong>{{ comment.content }}
-                </p>
-              </div>
-            </template>
-          </div>
-        </div>
-      </div>
-    </Teleport>
 
     <AppDialog
       v-model="showDialog"
@@ -198,6 +164,10 @@ onBeforeUnmount(() => {
 .square-view { max-width: 980px; margin: 0 auto; padding: 32px; }
 .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
 .header-hint { font-size: 13px; color: #555; }
+.sort-bar { display: flex; align-items: center; gap: 8px; margin-bottom: 14px; }
+.sort-label { font-size: 13px; color: #555; }
+.algo-panel { border: 1px solid #000; background: #fff; padding: 10px; margin-bottom: 12px; font-size: 13px; }
+.algo-panel p { margin: 4px 0; }
 .square-card { border: 1px solid #000; background: #fff; padding: 16px; margin-bottom: 16px; }
 .meta { color: #555; font-size: 13px; margin: 8px 0; }
 .content :deep(img) { max-width: 100%; border: 1px solid #000; }
@@ -205,108 +175,14 @@ onBeforeUnmount(() => {
 .tag { border: 1px solid #000; padding: 2px 8px; font-size: 12px; }
 .actions { display: flex; gap: 8px; margin-top: 8px; }
 .action-btn { border: 1px solid #000; background: #fff; color: #000; padding: 6px 10px; cursor: pointer; }
+.comment-count { border: 1px solid #000; padding: 6px 10px; font-size: 13px; }
+.action-btn.active { background: #000; color: #fff; }
+.recommend-tip { margin-top: 10px; border-left: 3px solid #000; padding-left: 10px; }
+.tip-title { margin: 0 0 4px; font-weight: 700; }
+.tip-line { margin: 3px 0; font-size: 13px; color: #222; }
 .comment-box { display: flex; gap: 8px; margin-top: 12px; }
 .comment-box :deep(.app-input) { flex: 1; }
 .comments { margin-top: 10px; border-top: 1px solid #000; padding-top: 8px; }
 .comment-line { margin: 6px 0; }
 .error { color: #000; }
-
-.swipe-overlay {
-  position: fixed;
-  inset: 0;
-  z-index: 1200;
-  background: rgba(0, 0, 0, 0.52);
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  padding: 24px;
-  overscroll-behavior: contain;
-}
-
-.overlay-header {
-  width: min(760px, 92vw);
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 12px;
-}
-
-.index-text { color: #fff; }
-
-.close-btn {
-  border: 1px solid #000;
-  background: #fff;
-  color: #000;
-  width: 34px;
-  height: 34px;
-  cursor: pointer;
-  font-size: 22px;
-  line-height: 28px;
-}
-
-.stack-wrap {
-  position: relative;
-  width: min(760px, 92vw);
-  height: min(78vh, 760px);
-}
-
-.nav-arrow {
-  position: absolute;
-  top: 50%;
-  transform: translateY(-50%);
-  width: 42px;
-  height: 42px;
-  border: 1px solid #000;
-  background: #fff;
-  color: #000;
-  font-size: 28px;
-  line-height: 36px;
-  cursor: pointer;
-  z-index: 4;
-}
-
-.nav-left {
-  left: -56px;
-}
-
-.nav-right {
-  right: -56px;
-}
-
-.nav-arrow:disabled {
-  opacity: 0.35;
-  cursor: not-allowed;
-}
-
-.stack-card {
-  position: absolute;
-  inset: 0;
-  border: 1px solid #000;
-  background: #fff;
-  padding: 16px;
-  overflow: auto;
-  overscroll-behavior: contain;
-  -webkit-overflow-scrolling: touch;
-  transition: transform 220ms ease, opacity 220ms ease;
-}
-
-.stack-card.layer-1 {
-  transform: translate(8px, 8px);
-  z-index: 1;
-}
-
-.stack-card.layer-2 {
-  transform: translate(16px, 16px);
-  z-index: 0;
-}
-
-.stack-card.layer-0 {
-  z-index: 2;
-}
-
-.stack-card.layer-0.swiping {
-  transform: translateX(-120%);
-  opacity: 0;
-}
 </style>

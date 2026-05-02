@@ -12,6 +12,23 @@ export type SquareArticle = Article & {
   likes_count: number
   comments_count: number
   liked_by_me: boolean
+  recommend_score: number
+  recommend_reason?: {
+    tip: string
+    matched_tags: string[]
+    similarity_score: number
+    hot_score: number
+    follow_bonus: number
+    liked_bonus: number
+    diversity_penalty: number
+    formula: {
+      similarity_part: number
+      hot_part: number
+      follow_part: number
+      liked_part: number
+      penalty_part: number
+    }
+  }
 }
 
 export type ArticleComment = {

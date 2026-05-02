@@ -36,6 +36,7 @@ class SquareArticleResponse(ArticleResponse):
     comments_count: int = 0
     liked_by_me: bool = False
     recommend_score: float = 0.0
+    recommend_reason: dict = {}
 
 
 class CommentCreate(BaseModel):
@@ -65,7 +66,7 @@ async def create_article(
         (article_id, article.title, content_base64, user["sub"])
     )
     
-    for tag_id in article.tag_ids:
+    for tag_id in (article.tag_ids or []):
         cursor.execute("SELECT id FROM tags WHERE id = ?", (tag_id,))
         if cursor.fetchone():
             cursor.execute(
@@ -116,23 +117,36 @@ async def list_square_articles(
     cursor.execute("""
         SELECT
             a.*,
-            GROUP_CONCAT(t.id || ':' || t.name) as tag_list,
-            COUNT(DISTINCT al.user_id) as likes_count,
-            COUNT(DISTINCT ac.id) as comments_count,
+            tg.tag_list as tag_list,
+            COALESCE(lk.likes_count, 0) as likes_count,
+            COALESCE(cm.comments_count, 0) as comments_count,
             MAX(CASE WHEN al.user_id = ? THEN 1 ELSE 0 END) as liked_by_me,
             MAX(CASE WHEN uf.follower_id = ? AND uf.followee_id = u.id THEN 1 ELSE 0 END) as followed_author
         FROM articles a
         LEFT JOIN users u ON u.username = a.author
-        LEFT JOIN article_tags at ON a.id = at.article_id
-        LEFT JOIN tags t ON at.tag_id = t.id
+        LEFT JOIN (
+            SELECT at.article_id, GROUP_CONCAT(t.id || ':' || t.name) as tag_list
+            FROM article_tags at
+            LEFT JOIN tags t ON at.tag_id = t.id
+            GROUP BY at.article_id
+        ) tg ON tg.article_id = a.id
+        LEFT JOIN (
+            SELECT article_id, COUNT(DISTINCT user_id) as likes_count
+            FROM article_likes
+            GROUP BY article_id
+        ) lk ON lk.article_id = a.id
+        LEFT JOIN (
+            SELECT article_id, COUNT(DISTINCT id) as comments_count
+            FROM article_comments
+            GROUP BY article_id
+        ) cm ON cm.article_id = a.id
         LEFT JOIN article_likes al ON a.id = al.article_id
-        LEFT JOIN article_comments ac ON a.id = ac.article_id
         LEFT JOIN user_follows uf ON uf.followee_id = u.id
         GROUP BY a.id
         ORDER BY
           (MAX(CASE WHEN uf.follower_id = ? AND uf.followee_id = u.id THEN 1 ELSE 0 END) * 10
-          + COUNT(DISTINCT al.user_id) * 2
-          + COUNT(DISTINCT ac.id) * 3
+          + COALESCE(lk.likes_count, 0) * 2
+          + COALESCE(cm.comments_count, 0) * 3
           + MAX(CASE WHEN al.user_id = ? THEN 1 ELSE 0 END) * 1) DESC,
           a.created_at DESC
     """, (user["user_id"], user["user_id"], user["user_id"], user["user_id"]))
@@ -266,6 +280,40 @@ async def create_comment(
     row = cursor.fetchone()
     return dict(row)
 
+
+@router.delete("/{article_id}/comments/{comment_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_comment(
+    article_id: str,
+    comment_id: str,
+    user: dict = Depends(get_current_user),
+    db: Connection = Depends(get_db)
+):
+    cursor = db.cursor()
+    cursor.execute("SELECT id, author FROM articles WHERE id = ?", (article_id,))
+    article_row = cursor.fetchone()
+    if not article_row:
+        raise HTTPException(status_code=404, detail="Article not found")
+
+    cursor.execute(
+        "SELECT id, user_id FROM article_comments WHERE id = ? AND article_id = ?",
+        (comment_id, article_id)
+    )
+    comment_row = cursor.fetchone()
+    if not comment_row:
+        raise HTTPException(status_code=404, detail="Comment not found")
+
+    cursor.execute("SELECT is_admin FROM users WHERE id = ?", (user["user_id"],))
+    current_user_row = cursor.fetchone()
+    is_admin = bool(current_user_row and current_user_row["is_admin"])
+
+    is_article_author = article_row["author"] == user["sub"]
+    is_comment_owner = comment_row["user_id"] == user["user_id"]
+    if not (is_admin or is_article_author or is_comment_owner):
+        raise HTTPException(status_code=403, detail="No permission to delete this comment")
+
+    cursor.execute("DELETE FROM article_comments WHERE id = ?", (comment_id,))
+    db.commit()
+
 @router.get("/{article_id}", response_model=ArticleResponse)
 async def get_article(article_id: str, db: Connection = Depends(get_db)):
     cursor = db.cursor()
@@ -319,7 +367,7 @@ async def update_article(
     
     if article.tag_ids is not None:
         cursor.execute("DELETE FROM article_tags WHERE article_id = ?", (article_id,))
-        for tag_id in article.tag_ids:
+        for tag_id in (article.tag_ids or []):
             cursor.execute("SELECT id FROM tags WHERE id = ?", (tag_id,))
             if cursor.fetchone():
                 cursor.execute(

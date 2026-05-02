@@ -7,6 +7,7 @@ export const useAuthStore = defineStore('auth', () => {
   const token = ref<string | null>(localStorage.getItem('token'))
   const username = ref<string | null>(localStorage.getItem('username'))
   const userId = ref<string | null>(localStorage.getItem('user_id'))
+  const isAdmin = ref(localStorage.getItem('is_admin') === '1')
   const avatarUrl = ref<string | null>(localStorage.getItem('avatar_url'))
 
   const isAuthenticated = computed(() => !!token.value)
@@ -28,9 +29,11 @@ export const useAuthStore = defineStore('auth', () => {
     const me = await authApi.me(token.value)
     userId.value = me.user_id
     username.value = me.username
+    isAdmin.value = !!me.is_admin
     avatarUrl.value = me.avatar_url ?? null
     localStorage.setItem('user_id', me.user_id)
     localStorage.setItem('username', me.username)
+    localStorage.setItem('is_admin', me.is_admin ? '1' : '0')
     if (me.avatar_url) {
       localStorage.setItem('avatar_url', me.avatar_url)
     } else {
@@ -56,16 +59,19 @@ export const useAuthStore = defineStore('auth', () => {
     token.value = null
     username.value = null
     userId.value = null
+    isAdmin.value = false
     avatarUrl.value = null
     localStorage.removeItem('token')
     localStorage.removeItem('username')
     localStorage.removeItem('user_id')
+    localStorage.removeItem('is_admin')
     localStorage.removeItem('avatar_url')
   }
 
   return {
     token,
     userId,
+    isAdmin,
     username,
     avatarUrl,
     avatarInitial,

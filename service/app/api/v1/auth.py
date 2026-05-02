@@ -28,6 +28,7 @@ class TokenResponse(BaseModel):
 class UserProfileResponse(BaseModel):
     user_id: str
     username: str
+    is_admin: bool = False
     avatar_url: str | None = None
 
 
@@ -43,9 +44,18 @@ def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(securit
     return payload
 
 
+def require_admin(user: dict = Depends(get_current_user), db: Connection = Depends(get_db)) -> dict:
+    cursor = db.cursor()
+    cursor.execute("SELECT is_admin FROM users WHERE id = ?", (user["user_id"],))
+    row = cursor.fetchone()
+    if not row or not bool(row["is_admin"]):
+        raise HTTPException(status_code=403, detail="仅管理员可访问")
+    return user
+
+
 def get_current_user_row(user_payload: dict, db: Connection) -> dict:
     cursor = db.cursor()
-    cursor.execute("SELECT id, username, avatar_url FROM users WHERE id = ?", (user_payload["user_id"],))
+    cursor.execute("SELECT id, username, is_admin, avatar_url FROM users WHERE id = ?", (user_payload["user_id"],))
     user_row = cursor.fetchone()
     if not user_row:
         raise HTTPException(status_code=404, detail="用户不存在")
@@ -70,13 +80,13 @@ async def register(user: UserRegister, db: Connection = Depends(get_db)):
 @router.post("/login", response_model=TokenResponse)
 async def login(user: UserLogin, db: Connection = Depends(get_db)):
     cursor = db.cursor()
-    cursor.execute("SELECT id, username, password_hash FROM users WHERE username = ?", (user.username,))
+    cursor.execute("SELECT id, username, password_hash, is_admin FROM users WHERE username = ?", (user.username,))
     row = cursor.fetchone()
     
     if not row or not verify_password(user.password, row["password_hash"]):
         raise HTTPException(status_code=401, detail="用户名或密码错误")
     
-    access_token = create_access_token(data={"sub": row["username"], "user_id": row["id"]})
+    access_token = create_access_token(data={"sub": row["username"], "user_id": row["id"], "is_admin": bool(row["is_admin"])})
     return {"access_token": access_token}
 
 
@@ -86,6 +96,7 @@ async def get_me(user: dict = Depends(get_current_user), db: Connection = Depend
     return {
         "user_id": user_row["id"],
         "username": user_row["username"],
+        "is_admin": bool(user_row["is_admin"]),
         "avatar_url": user_row["avatar_url"]
     }
 
@@ -122,7 +133,7 @@ async def update_me(
         cursor.execute(f"UPDATE users SET {', '.join(updates)} WHERE id = ?", params)
         db.commit()
 
-    new_token = create_access_token(data={"sub": next_username, "user_id": user_row["id"]})
+    new_token = create_access_token(data={"sub": next_username, "user_id": user_row["id"], "is_admin": bool(user_row["is_admin"])})
     return {
         "message": "更新成功",
         "access_token": new_token,

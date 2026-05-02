@@ -1,0 +1,17 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer components {
+  .mono-btn {
+    @apply border border-black bg-white px-3 py-1.5 text-black;
+  }
+
+  .mono-btn-primary {
+    @apply border border-black bg-black px-3 py-1.5 text-white;
+  }
+
+  .mono-panel {
+    @apply border border-black bg-white p-4;
+  }
+}

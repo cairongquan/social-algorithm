@@ -1,6 +1,7 @@
 export type User = {
   user_id: string
   username: string
+  is_admin?: boolean
   avatar_url?: string | null
 }
 

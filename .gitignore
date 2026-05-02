@@ -27,9 +27,6 @@ service/__pycache__/
 service/**/*.pyc
 service/.pytest_cache/
 
-# Runtime / Data
-service/social_algorithm.db
-service/uploads/
 
 # Temp
 tmp/

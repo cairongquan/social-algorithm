@@ -34,7 +34,8 @@ function handleLogout() {
       </div>
       <div class="nav-links">
         <router-link to="/square" class="nav-link">广场</router-link>
-        <router-link to="/topology" class="nav-link">拓扑</router-link>
+        <router-link v-if="authStore.isAdmin" to="/admin/algorithm" class="nav-link">算法配置</router-link>
+        <router-link v-if="authStore.isAdmin" to="/topology" class="nav-link">拓扑</router-link>
         <router-link to="/tags" class="nav-link">标签管理</router-link>
         <router-link to="/profile" class="nav-link profile-link">
           <img v-if="authStore.avatarUrl" :src="authStore.avatarUrl" class="nav-avatar-img" alt="头像" />
@@ -51,6 +52,13 @@ function handleLogout() {
 </template>
 
 <style>
+:root {
+  --mono-bg: #ffffff;
+  --mono-fg: #000000;
+  --mono-muted: #666666;
+  --mono-border: #000000;
+}
+
 * {
   margin: 0;
   padding: 0;
@@ -59,8 +67,9 @@ function handleLogout() {
 
 body {
   font-family: "Source Serif 4", Georgia, serif;
-  background: #ffffff;
-  color: #000000;
+  background: var(--mono-bg);
+  color: var(--mono-fg);
+  line-height: 1.6;
 }
 
 body::before {
@@ -79,16 +88,17 @@ body::before {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 16px 32px;
-  background: #ffffff;
-  border-bottom: 2px solid #000000;
+  padding: 16px 28px;
+  background: var(--mono-bg);
+  border-bottom: 2px solid var(--mono-border);
 }
 
 .nav-brand a {
-  color: #000000;
+  color: var(--mono-fg);
   text-decoration: none;
   font-size: 20px;
   font-weight: bold;
+  letter-spacing: 0.5px;
 }
 
 .nav-links {
@@ -98,8 +108,14 @@ body::before {
 }
 
 .nav-link {
-  color: #000000;
+  color: var(--mono-fg);
   text-decoration: none;
+  border-bottom: 1px solid transparent;
+  transition: border-color 120ms ease;
+}
+
+.nav-link:hover {
+  border-bottom-color: var(--mono-border);
 }
 
 .profile-link {
@@ -112,7 +128,7 @@ body::before {
 .nav-avatar-fallback {
   width: 28px;
   height: 28px;
-  border: 1px solid #000000;
+  border: 1px solid var(--mono-border);
   border-radius: 50%;
   object-fit: cover;
 }
@@ -126,14 +142,43 @@ body::before {
 }
 
 .btn-logout {
-  padding: 6px 12px;
-  background: #000000;
-  color: #ffffff;
-  border: 1px solid #000000;
+  padding: 7px 12px;
+  background: var(--mono-fg);
+  color: var(--mono-bg);
+  border: 1px solid var(--mono-border);
   cursor: pointer;
+}
+
+button,
+input,
+textarea,
+select {
+  font-family: "Source Serif 4", Georgia, serif;
+}
+
+button {
+  transition: transform 120ms ease;
+}
+
+button:hover {
+  transform: translateY(-1px);
 }
 
 .main-content {
   min-height: calc(100vh - 60px);
+  padding-bottom: 24px;
+}
+
+@media (max-width: 900px) {
+  .navbar {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
+  }
+
+  .nav-links {
+    flex-wrap: wrap;
+    gap: 12px;
+  }
 }
 </style>

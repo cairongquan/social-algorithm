@@ -1,5 +1,5 @@
 import axios from 'axios'
-import type { Tag, TagCreate, TagUpdate } from '@/types/tag'
+import type { Tag, TagCreate, TagUpdate, TagPushPreview } from '@/types/tag'
 
 const API_BASE = '/api/v1'
 
@@ -16,6 +16,14 @@ export const tagsApi = {
 
   async create(data: TagCreate): Promise<{ id: string }> {
     const response = await axios.post(`${API_BASE}/tags`, data, { headers: getHeaders() })
+    return response.data
+  },
+
+  async previewPushUsers(name: string): Promise<TagPushPreview> {
+    const response = await axios.get(`${API_BASE}/tags/preview/push-users`, {
+      params: { name },
+      headers: getHeaders()
+    })
     return response.data
   },
 

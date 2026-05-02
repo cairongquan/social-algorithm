@@ -1,9 +1,10 @@
 import { ref } from 'vue'
 import { tagsApi } from '@/api/tags'
-import type { Tag, TagCreate, TagUpdate } from '@/types/tag'
+import type { Tag, TagCreate, TagUpdate, TagPushPreview } from '@/types/tag'
 
 export function useTag() {
   const tags = ref<Tag[]>([])
+  const pushPreview = ref<TagPushPreview | null>(null)
   const loading = ref(false)
   const error = ref<string | null>(null)
 
@@ -61,5 +62,18 @@ export function useTag() {
     }
   }
 
-  return { tags, loading, error, fetchTags, createTag, updateTag, deleteTag }
+  async function fetchPushPreview(name: string) {
+    const tagName = name.trim()
+    if (!tagName) {
+      pushPreview.value = null
+      return
+    }
+    try {
+      pushPreview.value = await tagsApi.previewPushUsers(tagName)
+    } catch (err) {
+      pushPreview.value = null
+    }
+  }
+
+  return { tags, pushPreview, loading, error, fetchTags, createTag, updateTag, deleteTag, fetchPushPreview }
 }

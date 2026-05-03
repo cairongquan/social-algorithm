@@ -1,50 +1,87 @@
-# Social Algorithm - 文章管理系统
+# Social Algorithm
+
+一个基于 `FastAPI + SQLite + Vue 3` 的社交化文章系统，支持用户认证、文章发布、标签管理、图片上传、点赞评论、关注关系、推荐排序与管理员分析能力。
+
+## 功能概览
+
+- 用户模块：注册、登录、个人信息查询与更新、头像上传
+- 内容模块：文章增删改查、标签绑定、广场流推荐
+- 互动模块：点赞、评论、关注、浏览行为记录、停留时长上报
+- 推荐模块：基于行为与热度的混合排序，支持算法参数调优
+- 管理模块：算法参数管理、离线实验报告导出、社交拓扑图、停留指标统计
 
 ## 项目结构
 
-```
+```text
 social-algorithm/
-├── service/              # Python后端 (FastAPI + SQLite)
+├── service/                    # Python 后端（FastAPI + SQLite）
 │   ├── app/
-│   │   ├── api/v1/      # API路由（认证、文章、标签、上传）
-│   │   ├── core/        # 配置、数据库、安全
-│   │   ├── models/      # Pydantic模型
-│   │   ├── services/    # 业务逻辑
-│   │   └── main.py     # 入口文件
-│   ├── uploads/         # 上传文件存储
+│   │   ├── api/v1/             # API 路由（auth/articles/tags/uploads/social/topology/admin）
+│   │   ├── core/               # 配置、数据库、安全
+│   │   ├── models/             # Pydantic 模型（示例）
+│   │   ├── services/           # 推荐与业务服务
+│   │   └── main.py             # FastAPI 应用入口
+│   ├── reports/                # 管理端导出的实验报告（CSV/MD/PNG）
+│   ├── uploads/                # 上传文件存储目录
 │   ├── requirements.txt
-│   └── run.py          # 启动脚本
+│   └── run.py                  # 后端启动脚本
 │
-└── app/                 # Vue3前端
+└── app/                        # Vue 3 前端（Vite + TypeScript）
     ├── src/
-    │   ├── types/       # TypeScript类型
-    │   ├── api/         # API调用
-    │   ├── stores/      # Pinia状态管理
-    │   ├── composables/ # 组合式函数
-    │   ├── components/  # Vue组件
-    │   ├── views/       # 页面视图
-    │   ├── router/      # 路由配置
-    │   ├── main.ts      # 入口
-    │   └── App.vue     # 根组件
     ├── package.json
     └── vite.config.ts
 ```
 
 ## 快速启动
 
-### 1. 启动后端
+### 1) 启动后端
+
+在仓库根目录执行：
 
 ```bash
 cd service
-python3 -m venv venv
-source venv/bin/activate  # Windows: venv\Scripts\activate
-pip install -i https://pypi.tuna.tsinghua.edu.cn/simple -r requirements.txt
+```
+
+创建虚拟环境：
+
+```bash
+python -m venv .venv
+```
+
+激活虚拟环境：
+
+- Windows (PowerShell)
+
+```powershell
+.\.venv\Scripts\Activate.ps1
+```
+
+- Windows (CMD)
+
+```bat
+.venv\Scripts\activate.bat
+```
+
+- macOS / Linux
+
+```bash
+source .venv/bin/activate
+```
+
+安装依赖并启动：
+
+```bash
+pip install -r requirements.txt
 python run.py
 ```
 
-后端启动后访问：http://localhost:8000/api/v1/docs
+后端地址：`http://localhost:8000`
 
-### 2. 启动前端
+接口文档：`http://localhost:8000/api/v1/docs`
+
+### 2) 启动前端
+
+在仓库根目录执行：
 
 ```bash
 cd app
@@ -52,70 +89,102 @@ npm install
 npm run dev
 ```
 
-前端启动后访问：http://localhost:5173
+前端地址：`http://localhost:5173`
 
-## 功能说明
+## 默认账号
 
-### 用户认证
-- 注册：/register
-- 登录：/login
-- 使用JWT token认证
+系统初始化会自动创建管理员账号：
 
-### 文章管理
-- 文章列表：首页
-- 创建文章：/articles/create
-- 编辑文章：/articles/:id/edit
-- 删除文章：文章卡片上的删除按钮
-- 文章内容使用TinyMCE富文本编辑器
-- 文章以base64存储到SQLite
+- 用户名：`admin`
+- 密码：`admin`
 
-### 标签管理
-- 标签列表：/tags
-- 创建标签、编辑标签、删除标签
-- 删除标签时会清除关联文章的所有标签
+建议仅用于本地开发演示，生产环境请立即修改。
 
-### 图片上传
-- 在TinyMCE编辑器中可直接上传图片
-- 图片保存到service/uploads/目录
+## 核心 API 概览
 
-## API端点
+以下为主要接口分组（完整参数请以 Swagger 文档为准）：
 
-### 认证
-- POST /api/v1/auth/register - 注册
-- POST /api/v1/auth/login - 登录
+### Auth
 
-### 文章
-- GET /api/v1/articles - 列表
-- POST /api/v1/articles - 创建（需认证）
-- GET /api/v1/articles/:id - 详情
-- PUT /api/v1/articles/:id - 更新（需认证）
-- DELETE /api/v1/articles/:id - 删除（需认证）
+- `POST /api/v1/auth/register`：注册
+- `POST /api/v1/auth/login`：登录
+- `GET /api/v1/auth/me`：当前用户资料
+- `PUT /api/v1/auth/me`：更新用户名/密码
+- `POST /api/v1/auth/avatar`：上传头像
 
-### 标签
-- GET /api/v1/tags - 列表
-- POST /api/v1/tags - 创建（需认证）
-- PUT /api/v1/tags/:id - 更新（需认证）
-- DELETE /api/v1/tags/:id - 删除（需认证）
+### Articles
 
-### 上传
-- POST /api/v1/uploads/upload - 上传图片（需认证）
-- GET /api/v1/uploads/:filename - 获取图片
+- `GET /api/v1/articles`：文章列表
+- `POST /api/v1/articles`：创建文章
+- `GET /api/v1/articles/{article_id}`：文章详情
+- `PUT /api/v1/articles/{article_id}`：更新文章
+- `DELETE /api/v1/articles/{article_id}`：删除文章
+- `GET /api/v1/articles/square`：推荐广场
+- `POST /api/v1/articles/{article_id}/view`：记录浏览
+- `POST /api/v1/articles/{article_id}/dwell`：上报停留时长
+- `POST /api/v1/articles/{article_id}/like`：点赞/取消点赞
+- `GET /api/v1/articles/{article_id}/comments`：评论列表
+- `POST /api/v1/articles/{article_id}/comments`：发表评论
+- `DELETE /api/v1/articles/{article_id}/comments/{comment_id}`：删除评论
+
+### Tags
+
+- `GET /api/v1/tags`：标签列表
+- `POST /api/v1/tags`：创建标签
+- `PUT /api/v1/tags/{tag_id}`：更新标签
+- `DELETE /api/v1/tags/{tag_id}`：删除标签
+- `GET /api/v1/tags/preview/push-users?name=...`：标签推送用户预览
+
+### Uploads
+
+- `POST /api/v1/uploads/upload`：上传文件
+- `GET /api/v1/uploads/{filename}`：获取文件
+- `GET /api/v1/uploads`：当前用户上传列表
+
+### Social
+
+- `GET /api/v1/social/users`：用户列表（含是否已关注）
+- `POST /api/v1/social/follow/{target_user_id}`：关注/取消关注
+
+### Topology
+
+- `GET /api/v1/topology/overview`：关系概览
+- `GET /api/v1/topology/graph`：社交拓扑图数据
+
+### Admin
+
+- `GET /api/v1/admin/algorithm-settings`：获取算法参数（管理员）
+- `GET /api/v1/admin/algorithm-settings/current`：获取当前参数（登录用户）
+- `PUT /api/v1/admin/algorithm-settings`：更新算法参数（管理员）
+- `POST /api/v1/admin/algorithm-settings/reset`：重置算法参数（管理员）
+- `POST /api/v1/admin/experiment-report`：生成离线实验报告（管理员）
+- `GET /api/v1/admin/experiment-report/files/{filename}`：下载报告文件（管理员）
+- `GET /api/v1/admin/metrics/dwell`：停留指标统计（管理员）
 
 ## 技术栈
 
-**后端：**
-- FastAPI - Web框架
-- SQLite3 - 数据库
-- Pydantic - 数据验证
-- PyJWT - JWT认证
-- Uvicorn - ASGI服务器
+后端：
 
-**前端：**
-- Vue 3 - 渐进式框架
-- TypeScript - 类型安全
-- Vite 5 - 构建工具（兼容Node 18）
-- Pinia - 状态管理
-- Vue Router - 路由
-- TinyMCE - 富文本编辑器
-- Axios - HTTP客户端
-# social-algorithm
+- `FastAPI`
+- `SQLite3`
+- `Pydantic`
+- `PyJWT`
+- `Uvicorn`
+- `Pillow`（实验图表生成）
+
+前端：
+
+- `Vue 3`
+- `TypeScript`
+- `Vite`
+- `Pinia`
+- `Vue Router`
+- `Axios`
+- `TinyMCE`
+
+## 开发说明
+
+- 数据库文件默认位于 `service/social_algorithm.db`
+- 首次启动会自动执行数据库初始化
+- 推荐算法参数存储在 `algorithm_settings` 表
+- 如需调试接口，优先使用 `http://localhost:8000/api/v1/docs`

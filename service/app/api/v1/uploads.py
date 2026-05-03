@@ -1,3 +1,5 @@
+"""文件上传、访问与历史列表接口。"""
+
 import os
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 from fastapi.responses import FileResponse

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { articlesApi } from '@/api/articles'
 import { adminApi, type AlgorithmCurrent } from '@/api/admin'
 import type { SquareArticle, ArticleComment } from '@/types/article'
@@ -16,6 +16,23 @@ const showDialog = ref(false)
 const dialogMessage = ref('')
 const sortBy = ref<'recommend' | 'latest'>('recommend')
 const algorithmCurrent = ref<AlgorithmCurrent | null>(null)
+const dwellDisplaySeconds = ref<Record<string, number>>({})
+const dwellQualified = ref<Record<string, boolean>>({})
+const dwellFinalSeconds = ref<Record<string, number>>({})
+
+const articleElements = new Map<string, HTMLElement>()
+const visibleSince = new Map<string, number>()
+const accumulatedMs = new Map<string, number>()
+const dwellTimers = new Map<string, number>()
+const dwellIntervals = new Map<string, number>()
+const reportedInSession = new Set<string>()
+let articleObserver: IntersectionObserver | null = null
+
+const dwellThresholdSeconds = computed(() => {
+  const value = Number(algorithmCurrent.value?.dwell_threshold_seconds ?? 15)
+  if (!Number.isFinite(value)) return 15
+  return Math.max(1, Math.round(value))
+})
 
 const sortedArticles = computed(() => {
   const list = [...articles.value]
@@ -68,8 +85,251 @@ async function submitComment(articleId: string) {
   if (hit) hit.comments_count += 1
 }
 
+async function reportDwellIfNeeded(articleId: string) {
+  if (reportedInSession.has(articleId)) return
+  const dwellSeconds = getCurrentDwellSeconds(articleId)
+  if (dwellSeconds < dwellThresholdSeconds.value) return
+
+  try {
+    await articlesApi.reportDwell(articleId, dwellSeconds)
+    reportedInSession.add(articleId)
+  } catch (error) {
+  }
+}
+
+function getCurrentDwellMs(articleId: string) {
+  const base = accumulatedMs.get(articleId) || 0
+  const start = visibleSince.get(articleId)
+  if (!start) return base
+  return base + Math.max(0, Date.now() - start)
+}
+
+function getCurrentDwellSeconds(articleId: string) {
+  return Math.max(1, Math.round(getCurrentDwellMs(articleId) / 1000))
+}
+
+function setDwellQualified(articleId: string, value: boolean) {
+  dwellQualified.value = {
+    ...dwellQualified.value,
+    [articleId]: value
+  }
+}
+
+function setDwellFinalSeconds(articleId: string, seconds: number) {
+  dwellFinalSeconds.value = {
+    ...dwellFinalSeconds.value,
+    [articleId]: seconds
+  }
+}
+
+function clearDwellFinalSeconds(articleId: string) {
+  if (!(articleId in dwellFinalSeconds.value)) return
+  dwellFinalSeconds.value = Object.fromEntries(
+    Object.entries(dwellFinalSeconds.value).filter(([key]) => key !== articleId)
+  )
+}
+
+function clearDwellQualified(articleId: string) {
+  if (!(articleId in dwellQualified.value)) return
+  dwellQualified.value = Object.fromEntries(
+    Object.entries(dwellQualified.value).filter(([key]) => key !== articleId)
+  )
+}
+
+function setDwellDisplay(articleId: string, seconds: number) {
+  dwellDisplaySeconds.value = {
+    ...dwellDisplaySeconds.value,
+    [articleId]: seconds
+  }
+}
+
+function clearDwellDisplay(articleId: string) {
+  if (!(articleId in dwellDisplaySeconds.value)) return
+  dwellDisplaySeconds.value = Object.fromEntries(
+    Object.entries(dwellDisplaySeconds.value).filter(([key]) => key !== articleId)
+  )
+}
+
+function finalizeVisibleSpan(articleId: string) {
+  const start = visibleSince.get(articleId)
+  if (!start) return
+  const prev = accumulatedMs.get(articleId) || 0
+  accumulatedMs.set(articleId, prev + Math.max(0, Date.now() - start))
+  visibleSince.delete(articleId)
+}
+
+function clearDwellInterval(articleId: string) {
+  const timer = dwellIntervals.get(articleId)
+  if (timer !== undefined) {
+    window.clearInterval(timer)
+    dwellIntervals.delete(articleId)
+  }
+}
+
+function startDwellDisplay(articleId: string) {
+  clearDwellInterval(articleId)
+  setDwellDisplay(articleId, getCurrentDwellSeconds(articleId))
+  setDwellQualified(articleId, true)
+  clearDwellFinalSeconds(articleId)
+
+  const timer = window.setInterval(() => {
+    if (!visibleSince.has(articleId)) {
+      clearDwellInterval(articleId)
+      return
+    }
+    setDwellDisplay(articleId, getCurrentDwellSeconds(articleId))
+  }, 1000)
+  dwellIntervals.set(articleId, timer)
+}
+
+function clearDwellTimer(articleId: string) {
+  const timer = dwellTimers.get(articleId)
+  if (timer !== undefined) {
+    window.clearTimeout(timer)
+    dwellTimers.delete(articleId)
+  }
+}
+
+function scheduleDwellTimer(articleId: string) {
+  clearDwellTimer(articleId)
+  if (reportedInSession.has(articleId)) return
+
+  const remainingMs = Math.max(0, dwellThresholdSeconds.value * 1000 - getCurrentDwellMs(articleId))
+  if (remainingMs <= 0) {
+    startDwellDisplay(articleId)
+    reportDwellIfNeeded(articleId)
+    return
+  }
+
+  const timer = window.setTimeout(async () => {
+    startDwellDisplay(articleId)
+    await reportDwellIfNeeded(articleId)
+    clearDwellTimer(articleId)
+  }, remainingMs)
+  dwellTimers.set(articleId, timer)
+}
+
+function handleArticleVisibility(articleId: string, isVisible: boolean) {
+  if (isVisible) {
+    if (!visibleSince.has(articleId)) {
+      visibleSince.set(articleId, Date.now())
+      scheduleDwellTimer(articleId)
+      if (dwellQualified.value[articleId]) {
+        startDwellDisplay(articleId)
+      }
+    }
+    return
+  }
+
+  finalizeVisibleSpan(articleId)
+  reportDwellIfNeeded(articleId)
+  if (dwellQualified.value[articleId]) {
+    const finalSeconds = getCurrentDwellSeconds(articleId)
+    setDwellFinalSeconds(articleId, finalSeconds)
+  }
+  clearDwellTimer(articleId)
+  clearDwellInterval(articleId)
+  clearDwellDisplay(articleId)
+}
+
+function setupObserver() {
+  if (articleObserver) {
+    articleObserver.disconnect()
+  }
+
+  articleObserver = new IntersectionObserver(
+    entries => {
+      entries.forEach(entry => {
+        const element = entry.target as HTMLElement
+        const articleId = element.dataset.articleId
+        if (!articleId) return
+        const ratio = entry.intersectionRatio || 0
+        handleArticleVisibility(articleId, entry.isIntersecting && ratio >= 0.6)
+      })
+    },
+    {
+      threshold: [0, 0.4, 0.6, 0.8, 1]
+    }
+  )
+
+  articleElements.forEach(el => {
+    articleObserver?.observe(el)
+  })
+}
+
+function bindArticleRef(el: Element | null, articleId: string) {
+  if (el) {
+    articleElements.set(articleId, el as HTMLElement)
+    if (articleObserver) {
+      articleObserver.observe(el)
+    }
+    return
+  }
+
+  const existing = articleElements.get(articleId)
+  if (existing && articleObserver) {
+    articleObserver.unobserve(existing)
+  }
+  articleElements.delete(articleId)
+  finalizeVisibleSpan(articleId)
+  clearDwellTimer(articleId)
+  clearDwellInterval(articleId)
+  clearDwellDisplay(articleId)
+  clearDwellQualified(articleId)
+  clearDwellFinalSeconds(articleId)
+  accumulatedMs.delete(articleId)
+}
+
 onMounted(() => {
   loadSquare()
+})
+
+watch(
+  () => sortedArticles.value.map(item => item.id).join(','),
+  async () => {
+    await nextTick()
+    setupObserver()
+  }
+)
+
+watch(dwellThresholdSeconds, () => {
+  visibleSince.forEach((_, articleId) => {
+    clearDwellTimer(articleId)
+    clearDwellInterval(articleId)
+    clearDwellDisplay(articleId)
+    clearDwellQualified(articleId)
+    clearDwellFinalSeconds(articleId)
+    reportedInSession.delete(articleId)
+    if (!reportedInSession.has(articleId)) {
+      scheduleDwellTimer(articleId)
+    }
+  })
+})
+
+onBeforeUnmount(() => {
+  visibleSince.forEach((_, articleId) => {
+    finalizeVisibleSpan(articleId)
+    reportDwellIfNeeded(articleId)
+  })
+
+  dwellTimers.forEach(timer => {
+    window.clearTimeout(timer)
+  })
+  dwellIntervals.forEach(timer => {
+    window.clearInterval(timer)
+  })
+  dwellTimers.clear()
+  dwellIntervals.clear()
+  visibleSince.clear()
+  accumulatedMs.clear()
+  dwellDisplaySeconds.value = {}
+  dwellQualified.value = {}
+  dwellFinalSeconds.value = {}
+
+  if (articleObserver) {
+    articleObserver.disconnect()
+    articleObserver = null
+  }
 })
 </script>
 
@@ -114,6 +374,7 @@ onMounted(() => {
         comment_factor={{ algorithmCurrent.hot_comment_factor }}，
         decay={{ algorithmCurrent.decay_factor }}
       </p>
+      <p><strong>停留阈值：</strong>{{ dwellThresholdSeconds }} 秒</p>
     </div>
 
     <div v-if="loading">加载中...</div>
@@ -121,7 +382,19 @@ onMounted(() => {
     <EmptyWiltedFlower v-else-if="articles.length === 0" text="广场暂无内容" />
 
     <div v-else class="feed-list">
-      <article v-for="item in sortedArticles" :key="item.id" class="square-card">
+      <article
+        v-for="item in sortedArticles"
+        :key="item.id"
+        :ref="el => bindArticleRef(el as Element | null, item.id)"
+        class="square-card"
+        :data-article-id="item.id"
+      >
+        <div v-if="dwellDisplaySeconds[item.id]" class="dwell-badge is-live">
+          阅读时间 {{ dwellDisplaySeconds[item.id] }}s
+        </div>
+        <div v-else-if="dwellFinalSeconds[item.id]" class="dwell-badge is-final">
+          本次阅读 {{ dwellFinalSeconds[item.id] }}s
+        </div>
         <h3>{{ item.title }}</h3>
         <p class="meta">{{ item.author }} · {{ item.created_at }}</p>
         <div class="content" v-html="item.content"></div>
@@ -168,7 +441,12 @@ onMounted(() => {
 .sort-label { font-size: 13px; color: #555; }
 .algo-panel { border: 1px solid #000; background: #fff; padding: 10px; margin-bottom: 12px; font-size: 13px; }
 .algo-panel p { margin: 4px 0; }
-.square-card { border: 1px solid #000; background: #fff; padding: 16px; margin-bottom: 16px; }
+.square-card { position: relative; border: 1px solid #000; background: #fff; padding: 16px; margin-bottom: 16px; }
+.square-card::before { content: ''; position: absolute; left: -1px; top: -1px; width: 12px; height: 12px; border-top: 2px solid #000; border-left: 2px solid #000; }
+.square-card::after { content: ''; position: absolute; right: -1px; bottom: -1px; width: 12px; height: 12px; border-right: 2px solid #000; border-bottom: 2px solid #000; }
+.dwell-badge { position: absolute; top: -1px; right: -1px; border: 1px solid #000; padding: 4px 10px; font-size: 12px; }
+.dwell-badge.is-live { background: #000; color: #fff; }
+.dwell-badge.is-final { background: #fff; color: #000; }
 .meta { color: #555; font-size: 13px; margin: 8px 0; }
 .content :deep(img) { max-width: 100%; border: 1px solid #000; }
 .tags { margin: 10px 0; display: flex; gap: 8px; flex-wrap: wrap; }

@@ -1,3 +1,5 @@
+"""标签管理与标签推送预览接口。"""
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlite3 import Connection
 from pydantic import BaseModel

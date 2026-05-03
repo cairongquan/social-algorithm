@@ -1,3 +1,5 @@
+"""用户关系（关注）相关接口。"""
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlite3 import Connection
 

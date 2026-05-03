@@ -1,3 +1,5 @@
+"""示例业务的 Pydantic 数据模型。"""
+
 from pydantic import BaseModel
 from typing import Optional
 

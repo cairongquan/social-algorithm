@@ -1,3 +1,5 @@
+"""FastAPI 应用入口与中间件装配。"""
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -5,6 +7,7 @@ from app.core.config import settings
 from app.api.v1 import router as api_v1_router
 
 def create_application() -> FastAPI:
+    """创建并配置 FastAPI 应用实例。"""
     app = FastAPI(
         title=settings.PROJECT_NAME,
         description=settings.PROJECT_DESCRIPTION,
@@ -26,6 +29,7 @@ def create_application() -> FastAPI:
 
     @app.get("/health")
     async def health_check():
+        """服务健康检查接口。"""
         return {"status": "healthy"}
 
     return app

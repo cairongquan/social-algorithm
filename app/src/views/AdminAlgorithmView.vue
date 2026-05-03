@@ -62,6 +62,12 @@ const settingDocs = {
     range: '[0, 2]（建议 0.15 ~ 0.50）',
     desc: '每条评论对热度分的贡献，通常高于点赞系数。'
   },
+  dwell_threshold_seconds: {
+    label: '停留阈值 dwell_threshold_seconds',
+    formula: 'dwell_seconds >= dwell_threshold_seconds 时记录停留',
+    range: '[1, 600]（建议 10 ~ 30）',
+    desc: '广场页面单篇文章在可视区域内停留达到该秒数后，计入停留统计并显示阅读时间。'
+  },
   algo_mode: {
     label: '算法模式 algo_mode',
     formula: '0=full_model, 1=hot_only, 2=similarity_only, 3=sim_hot',
@@ -79,6 +85,20 @@ const currentWeightSum = computed(() => {
     algorithm.value.liked_weight
   )
 })
+
+const dwellThresholdHint = computed(() => {
+  const value = algorithm.value?.dwell_threshold_seconds ?? 15
+  if (value < 8) return '阈值较低，容易把快速浏览计入有效阅读。'
+  if (value > 45) return '阈值较高，可能漏记正常阅读。'
+  return '阈值区间合理，适合信息流场景。'
+})
+
+function tuneDwellThreshold(delta: number) {
+  if (!algorithm.value) return
+  const current = Number(algorithm.value.dwell_threshold_seconds || 15)
+  const next = Math.max(1, Math.min(600, Math.round(current + delta)))
+  algorithm.value.dwell_threshold_seconds = next
+}
 
 async function loadSettings() {
   loading.value = true
@@ -245,6 +265,18 @@ onBeforeUnmount(() => {
           <p>建议范围：{{ settingDocs.hot_comment_factor.range }}</p>
         </div>
         <div class="algo-item">
+          <label>{{ settingDocs.dwell_threshold_seconds.label }} <input v-model.number="algorithm.dwell_threshold_seconds" type="number" step="1" min="1" max="600" /></label>
+          <p>说明：{{ settingDocs.dwell_threshold_seconds.desc }}</p>
+          <p>公式：{{ settingDocs.dwell_threshold_seconds.formula }}</p>
+          <p>建议范围：{{ settingDocs.dwell_threshold_seconds.range }}</p>
+          <div class="threshold-tools">
+            <button class="btn mini" type="button" @click="tuneDwellThreshold(-5)">-5s</button>
+            <button class="btn mini" type="button" @click="tuneDwellThreshold(5)">+5s</button>
+            <span>当前值：{{ Math.round(algorithm.dwell_threshold_seconds) }} 秒</span>
+          </div>
+          <p class="threshold-hint">{{ dwellThresholdHint }}</p>
+        </div>
+        <div class="algo-item">
           <label>{{ settingDocs.algo_mode.label }} <input v-model.number="algorithm.algo_mode" type="number" step="1" min="0" max="3" /></label>
           <p>说明：{{ settingDocs.algo_mode.desc }}</p>
           <p>公式：{{ settingDocs.algo_mode.formula }}</p>
@@ -307,6 +339,7 @@ onBeforeUnmount(() => {
 .panel { border: 1px solid #000; background: #fff; padding: 14px; }
 .users { grid-column: 1 / -1; }
 .btn { border: 1px solid #000; background: #fff; color: #000; padding: 4px 10px; cursor: pointer; }
+.btn.mini { padding: 2px 8px; font-size: 12px; }
 .algo-grid { display: grid; grid-template-columns: repeat(2, minmax(220px, 1fr)); gap: 8px; margin: 10px 0; }
 .algo-item { border: 1px solid #000; padding: 8px; }
 .algo-grid label { display: flex; justify-content: space-between; gap: 8px; align-items: center; font-weight: 700; }
@@ -321,4 +354,6 @@ onBeforeUnmount(() => {
 .downloads { display: flex; gap: 12px; margin: 10px 0; }
 .downloads a { color: #000; text-decoration: underline; }
 .chart { width: 100%; max-width: 760px; height: 380px; border: 1px solid #000; }
+.threshold-tools { display: flex; align-items: center; gap: 8px; margin-top: 8px; font-size: 12px; }
+.threshold-hint { margin-top: 6px; font-size: 12px; color: #333; }
 </style>

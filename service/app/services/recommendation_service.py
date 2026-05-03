@@ -1,3 +1,5 @@
+"""推荐排序、兴趣建模与行为记录服务。"""
+
 import math
 from collections import defaultdict
 from datetime import datetime
@@ -5,6 +7,7 @@ from sqlite3 import Connection
 
 
 class SimilarityCalculator:
+    """相似度计算工具。"""
     @staticmethod
     def cosine_similarity(vec1: dict[str, float], vec2: dict[str, float]) -> float:
         if not vec1 or not vec2:
@@ -23,6 +26,7 @@ class SimilarityCalculator:
 
 
 class UserInterestModel:
+    """用户兴趣向量模型（包含时间衰减）。"""
     def __init__(self, decay_factor: float = 0.95):
         self.decay_factor = decay_factor
         self.user_interest_vectors = defaultdict(lambda: defaultdict(float))
@@ -56,6 +60,7 @@ BEHAVIOR_WEIGHTS = {
 
 
 def record_behavior(db: Connection, user_id: str, article_id: str, behavior_type: str):
+    """记录用户在文章上的行为并映射到标签兴趣。"""
     cursor = db.cursor()
     cursor.execute(
         """
@@ -82,6 +87,7 @@ def record_behavior(db: Connection, user_id: str, article_id: str, behavior_type
 
 
 def rank_articles_for_user(db: Connection, user_id: str, articles: list[dict]) -> list[dict]:
+    """为指定用户计算文章推荐分并排序。"""
     cursor = db.cursor()
 
     cursor.execute('SELECT key, value FROM algorithm_settings')

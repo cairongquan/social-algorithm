@@ -64,5 +64,13 @@ export const articlesApi = {
 
   async markView(id: string): Promise<void> {
     await axios.post(`${API_BASE}/articles/${id}/view`, {}, { headers: getHeaders() })
+  },
+
+  async reportDwell(id: string, dwellSeconds: number): Promise<void> {
+    await axios.post(
+      `${API_BASE}/articles/${id}/dwell`,
+      { dwell_seconds: dwellSeconds },
+      { headers: getHeaders() }
+    )
   }
 }

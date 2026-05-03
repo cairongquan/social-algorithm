@@ -17,6 +17,7 @@ export type AlgorithmSettings = {
   hot_like_factor: number
   hot_comment_factor: number
   algo_mode: number
+  dwell_threshold_seconds: number
 }
 
 export type AlgorithmCurrent = AlgorithmSettings & {

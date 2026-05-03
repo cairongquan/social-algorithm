@@ -1,3 +1,5 @@
+"""SQLite 连接与数据库初始化逻辑。"""
+
 import sqlite3
 import os
 from uuid import uuid4
@@ -7,12 +9,14 @@ from app.core.security import hash_password
 DB_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'social_algorithm.db')
 
 def get_db() -> sqlite3.Connection:
+    """获取启用外键约束的数据库连接。"""
     conn = sqlite3.connect(DB_PATH, check_same_thread=False)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")
     return conn
 
 def init_db():
+    """初始化业务表结构并写入基础数据。"""
     conn = get_db()
     cursor = conn.cursor()
 
@@ -142,6 +146,18 @@ def init_db():
     )
     """)
 
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS article_dwell_logs (
+        id TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL,
+        article_id TEXT NOT NULL,
+        dwell_seconds REAL NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+        FOREIGN KEY (article_id) REFERENCES articles(id) ON DELETE CASCADE
+    )
+    """)
+
     default_settings = {
         "decay_factor": 0.95,
         "similarity_weight": 0.6,
@@ -152,6 +168,7 @@ def init_db():
         "hot_like_factor": 0.15,
         "hot_comment_factor": 0.25,
         "algo_mode": 0,
+        "dwell_threshold_seconds": 15,
     }
     for key, value in default_settings.items():
         cursor.execute(

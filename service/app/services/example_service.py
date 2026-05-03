@@ -1,7 +1,10 @@
+"""示例内存服务，实现基础 CRUD。"""
+
 from typing import List, Optional
 from app.models.example import ExampleCreate, ExampleUpdate, ExampleResponse
 
 class ExampleService:
+    """示例数据服务。"""
     def __init__(self):
         self._items = {}
         self._counter = 1

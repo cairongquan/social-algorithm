@@ -1,3 +1,5 @@
+"""示例端点集合。"""
+
 from fastapi import APIRouter
 
 router = APIRouter()

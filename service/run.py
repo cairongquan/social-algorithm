@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+"""本地开发启动入口。"""
+
 import uvicorn
 import os
 

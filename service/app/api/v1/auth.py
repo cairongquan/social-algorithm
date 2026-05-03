@@ -1,3 +1,5 @@
+"""用户注册、登录与个人资料相关接口。"""
+
 import os
 from uuid import uuid4
 
@@ -37,6 +39,7 @@ class UserProfileUpdate(BaseModel):
     password: str | None = None
 
 def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)) -> dict:
+    """从 Bearer Token 中解析当前登录用户。"""
     token = credentials.credentials
     payload = decode_token(token)
     if payload is None:
@@ -45,6 +48,7 @@ def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(securit
 
 
 def require_admin(user: dict = Depends(get_current_user), db: Connection = Depends(get_db)) -> dict:
+    """校验当前用户是否具备管理员权限。"""
     cursor = db.cursor()
     cursor.execute("SELECT is_admin FROM users WHERE id = ?", (user["user_id"],))
     row = cursor.fetchone()
@@ -54,6 +58,7 @@ def require_admin(user: dict = Depends(get_current_user), db: Connection = Depen
 
 
 def get_current_user_row(user_payload: dict, db: Connection) -> dict:
+    """查询并返回当前用户的数据库记录。"""
     cursor = db.cursor()
     cursor.execute("SELECT id, username, is_admin, avatar_url FROM users WHERE id = ?", (user_payload["user_id"],))
     user_row = cursor.fetchone()
@@ -63,6 +68,7 @@ def get_current_user_row(user_payload: dict, db: Connection) -> dict:
 
 @router.post("/register", status_code=status.HTTP_201_CREATED)
 async def register(user: UserRegister, db: Connection = Depends(get_db)):
+    """注册新用户。"""
     cursor = db.cursor()
     cursor.execute("SELECT id FROM users WHERE username = ?", (user.username,))
     if cursor.fetchone():
@@ -79,6 +85,7 @@ async def register(user: UserRegister, db: Connection = Depends(get_db)):
 
 @router.post("/login", response_model=TokenResponse)
 async def login(user: UserLogin, db: Connection = Depends(get_db)):
+    """用户登录并返回访问令牌。"""
     cursor = db.cursor()
     cursor.execute("SELECT id, username, password_hash, is_admin FROM users WHERE username = ?", (user.username,))
     row = cursor.fetchone()
@@ -92,6 +99,7 @@ async def login(user: UserLogin, db: Connection = Depends(get_db)):
 
 @router.get("/me", response_model=UserProfileResponse)
 async def get_me(user: dict = Depends(get_current_user), db: Connection = Depends(get_db)):
+    """获取当前用户资料。"""
     user_row = get_current_user_row(user, db)
     return {
         "user_id": user_row["id"],
@@ -107,6 +115,7 @@ async def update_me(
     user: dict = Depends(get_current_user),
     db: Connection = Depends(get_db)
 ):
+    """更新当前用户昵称或密码，并下发新令牌。"""
     user_row = get_current_user_row(user, db)
     cursor = db.cursor()
 
@@ -151,6 +160,7 @@ async def upload_avatar(
     user: dict = Depends(get_current_user),
     db: Connection = Depends(get_db)
 ):
+    """上传并更新当前用户头像。"""
     if not file.content_type or not file.content_type.startswith("image/"):
         raise HTTPException(status_code=400, detail="仅支持图片文件")
 

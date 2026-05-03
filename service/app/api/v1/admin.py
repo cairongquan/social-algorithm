@@ -1,3 +1,5 @@
+"""管理员侧算法配置、实验报告与指标接口。"""
+
 from fastapi import APIRouter, Depends
 from fastapi import HTTPException
 from fastapi.responses import FileResponse
@@ -26,6 +28,7 @@ DEFAULT_SETTINGS = {
     "hot_like_factor": 0.15,
     "hot_comment_factor": 0.25,
     "algo_mode": 0,
+    "dwell_threshold_seconds": 15,
 }
 
 SETTING_RANGES = {
@@ -38,6 +41,7 @@ SETTING_RANGES = {
     "hot_like_factor": (0.0, 2.0),
     "hot_comment_factor": (0.0, 2.0),
     "algo_mode": (0.0, 3.0),
+    "dwell_threshold_seconds": (1.0, 600.0),
 }
 
 
@@ -51,6 +55,7 @@ class AlgorithmSettingsResponse(BaseModel):
     hot_like_factor: float
     hot_comment_factor: float
     algo_mode: float
+    dwell_threshold_seconds: float
 
 
 class AlgorithmCurrentResponse(AlgorithmSettingsResponse):
@@ -67,6 +72,7 @@ class AlgorithmSettingsUpdate(BaseModel):
     hot_like_factor: float
     hot_comment_factor: float
     algo_mode: float
+    dwell_threshold_seconds: float
 
 
 class ExperimentSummary(BaseModel):
@@ -83,6 +89,16 @@ class ExperimentReportResponse(BaseModel):
     csv_url: str
     md_url: str
     png_url: str
+
+
+class DwellMetricsResponse(BaseModel):
+    days: int
+    threshold_seconds: float
+    total_views: int
+    total_dwell_reports: int
+    qualified_dwell_reports: int
+    dwell_rate: float
+    avg_dwell_seconds: float
 
 
 def _load_settings(db: Connection) -> dict:
@@ -386,3 +402,63 @@ async def download_experiment_report_file(
     if not file_path.exists():
         raise HTTPException(status_code=404, detail='文件不存在')
     return FileResponse(path=str(file_path), filename=safe_name)
+
+
+@router.get('/metrics/dwell', response_model=DwellMetricsResponse)
+async def get_dwell_metrics(
+    days: int = 7,
+    threshold_seconds: float = 15.0,
+    _: dict = Depends(require_admin),
+    db: Connection = Depends(get_db)
+):
+    if days <= 0 or days > 365:
+        raise HTTPException(status_code=400, detail='days 范围应为 1~365')
+    if threshold_seconds <= 0 or threshold_seconds > 600:
+        raise HTTPException(status_code=400, detail='threshold_seconds 范围应为 0~600')
+
+    cursor = db.cursor()
+    cursor.execute(
+        """
+        SELECT COUNT(*) AS c
+        FROM user_behaviors
+        WHERE behavior_type = '浏览'
+          AND created_at >= datetime('now', ?)
+        """,
+        (f'-{days} day',)
+    )
+    total_views = int(cursor.fetchone()['c'])
+
+    cursor.execute(
+        """
+        SELECT COUNT(*) AS c, COALESCE(AVG(dwell_seconds), 0) AS avg_seconds
+        FROM article_dwell_logs
+        WHERE created_at >= datetime('now', ?)
+        """,
+        (f'-{days} day',)
+    )
+    dwell_row = cursor.fetchone()
+    total_dwell_reports = int(dwell_row['c'])
+    avg_dwell_seconds = float(dwell_row['avg_seconds'] or 0)
+
+    cursor.execute(
+        """
+        SELECT COUNT(*) AS c
+        FROM article_dwell_logs
+        WHERE dwell_seconds >= ?
+          AND created_at >= datetime('now', ?)
+        """,
+        (threshold_seconds, f'-{days} day')
+    )
+    qualified_dwell_reports = int(cursor.fetchone()['c'])
+
+    dwell_rate = qualified_dwell_reports / total_views if total_views > 0 else 0.0
+
+    return {
+        'days': days,
+        'threshold_seconds': round(threshold_seconds, 2),
+        'total_views': total_views,
+        'total_dwell_reports': total_dwell_reports,
+        'qualified_dwell_reports': qualified_dwell_reports,
+        'dwell_rate': round(dwell_rate, 6),
+        'avg_dwell_seconds': round(avg_dwell_seconds, 3)
+    }

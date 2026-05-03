@@ -1,3 +1,5 @@
+"""社交拓扑概览与图谱数据接口。"""
+
 from fastapi import APIRouter, Depends
 from sqlite3 import Connection
 

@@ -1,3 +1,5 @@
+"""后端基础 API 冒烟测试。"""
+
 import pytest
 from fastapi.testclient import TestClient
 from app.main import app

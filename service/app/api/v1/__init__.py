@@ -1,3 +1,5 @@
+"""V1 版本 API 路由聚合。"""
+
 from fastapi import APIRouter
 from app.api.v1 import auth, articles, tags, uploads, endpoints, social, topology, admin
 

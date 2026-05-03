@@ -1,0 +1,5 @@
+mode,mode_name,users,recall_at_10,ndcg_at_10
+0,full_model,32,0.7188,0.2448
+1,hot_only,32,0.0625,0.0469
+2,similarity_only,32,0.2188,0.0885
+3,sim_hot,32,0.2188,0.0885

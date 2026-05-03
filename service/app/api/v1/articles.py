@@ -1,3 +1,5 @@
+"""文章、互动行为与推荐广场接口。"""
+
 import base64
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlite3 import Connection
@@ -50,6 +52,10 @@ class CommentResponse(BaseModel):
     username: str
     content: str
     created_at: str
+
+
+class DwellReport(BaseModel):
+    dwell_seconds: float
 
 @router.post("", status_code=status.HTTP_201_CREATED)
 async def create_article(
@@ -191,6 +197,35 @@ async def mark_view(
     if not cursor.fetchone():
         raise HTTPException(status_code=404, detail="Article not found")
     record_behavior(db, user["user_id"], article_id, "浏览")
+    db.commit()
+    return {"message": "ok"}
+
+
+@router.post("/{article_id}/dwell")
+async def report_dwell(
+    article_id: str,
+    payload: DwellReport,
+    user: dict = Depends(get_current_user),
+    db: Connection = Depends(get_db)
+):
+    dwell_seconds = float(payload.dwell_seconds)
+    if dwell_seconds <= 0:
+        raise HTTPException(status_code=400, detail="dwell_seconds 必须大于 0")
+    if dwell_seconds > 7200:
+        raise HTTPException(status_code=400, detail="dwell_seconds 不能超过 7200 秒")
+
+    cursor = db.cursor()
+    cursor.execute("SELECT id FROM articles WHERE id = ?", (article_id,))
+    if not cursor.fetchone():
+        raise HTTPException(status_code=404, detail="Article not found")
+
+    cursor.execute(
+        """
+        INSERT INTO article_dwell_logs (id, user_id, article_id, dwell_seconds)
+        VALUES (?, ?, ?, ?)
+        """,
+        (str(uuid4()), user["user_id"], article_id, dwell_seconds)
+    )
     db.commit()
     return {"message": "ok"}
 
